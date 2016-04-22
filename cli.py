@@ -14,25 +14,24 @@ def matching(possible, m=None):
     else:
         args = []
         current.update(possible)
-    [(new.add(x[1:]), args.remove(x)) for x in args if x[0] == '_']
+    [(new.add(x[1:]), args.remove(x)) for x in list(args) if x[0] == '_']
     [new.add(x) for x in args if not _match(possible, x)]
     [current.update(_match(possible, x)) for x in args]
-    print(new, current)
     return (new, current)
 
 def handle(commands, args=None):
     a = args.pop(0) if args else []
-    stdin = None
-    if a[0] == '_':
-        stdin = sys.stdin.read()
-        a = a[1:]
     n_cmds, cmds = matching(commands.keys(), a)
     for com in cmds:
         process = zip_longest(args, commands[com][1], fillvalue='')
         process = map(lambda x: (x[0], x[1][0], x[1][1], x[1][2]), process)
         params = []
         for arg, group, possible, maker in process:
-            n, c = matching(possible(), arg)
+            if arg and arg[0] == '~':
+                arg = arg[1:]
+                n, c = matching(files_comps(), arg)
+            else:
+                n, c = matching(possible(), arg)
             if group == 'both':
                 pos = n | c
             elif group == 'new':
@@ -49,7 +48,8 @@ def _file_list(top=None):
         for f in fs:
             yield os.path.join(p, f)
         
-files = (lambda x: x, [('current', lambda: [x for x in _file_list()], lambda x: x)])
+files_comps = lambda: set(_file_list())
+
 if __name__ == '__main__':
     # example
     data_1 = set('this old man he played dumb he played tic tac'.split())
@@ -57,5 +57,6 @@ if __name__ == '__main__':
     sys.argv.pop(0)
     cmds = {'one': (lambda a, b: (a, b), [('both', lambda: data_1, lambda x: x.upper()),
                                           ('current', lambda: data_2, lambda x: x.upper())]),
-            'files': files}
-    list(handle(cmds, sys.argv))
+            'two': (lambda a, b: ('two', a, b), [('both', lambda: data_1, lambda x: x.upper()),    
+                                          ('current', lambda: data_2, lambda x: x.upper())])}
+    print(list(handle(cmds, sys.argv)))
