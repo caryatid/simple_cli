@@ -1,7 +1,7 @@
 #!/usr/bin/python
 import sys
 import os
-from itertools import zip_longest, product
+from itertools import zip_longest, product, repeat, chain
 from collections import defaultdict
         
 def _match(possible, m=None):
@@ -18,6 +18,52 @@ def matching(possible, m=None):
     [new.add(x) for x in args if not _match(possible, x)]
     [current.update(_match(possible, x)) for x in args]
     return (new, current)
+
+def _make_parameters(products):
+    params = []
+    for arg, group, possible, maker in products:
+        if arg and arg[0] == '+':
+            arg = arg[1:]
+            n, c = matching(_stdin_list(), arg)
+        elif arg and arg[0] == '.':
+            arg = arg[1:]
+            n, c = matching(files_comps(), arg)
+        elif arg and arg[0] == ',':
+            arg = arg[1:]
+            n = set(arg.split(','))
+            c = n
+        else:
+            n, c = matching(possible(params), arg)
+        if 'current' in group:
+            pos = c
+        elif 'new' in group:
+            pos = n
+        else:
+            pos = n | c
+        if '1' in group:
+            if not arg:
+                pos = set()
+            else:
+                pos = sorted(pos, key=len)[:1]
+        params.append([y for y in [maker(x) for x in pos] if y])
+    return [x for x in params if x]
+
+def _expand_arguments(args, arg_h):
+    procs = map(lambda y: (y[0], y[1][0], y[1][1], y[1][2]),
+                zip_longest(args, arg_h, fillvalue=''))
+    prod, app, split = (list(), list(), False)
+    for x in procs:
+        if x[1][0] == '|':
+            split = True
+            continue
+        if split:
+            app.append(x)
+        else:
+            prod.append(x)
+    a = product(*_make_parameters(prod))
+    b = zip(a, repeat(sorted(_make_parameters(app), key=len)))
+    return map(lambda x: list(chain(*x)), b)
+
 
 def handle(commands, args=None):
     a = args.pop(0) if args else ''
@@ -38,33 +84,7 @@ def handle(commands, args=None):
     else:
         cmd = commands[com_name][0]
     arg_h = commands[com_name][1]
-    params = []
-    procs = map(lambda y: (y[0], y[1][0], y[1][1], y[1][2]),
-                zip_longest(args, arg_h, fillvalue=''))
-    for arg, group, possible, maker in procs:
-        if arg and arg[0] == '+':
-            arg = arg[1:]
-            n, c = matching(_stdin_list(), arg)
-        elif arg and arg[0] == '.':
-            arg = arg[1:]
-            n, c = matching(files_comps(), arg)
-        elif arg and arg[0] == ',':
-            arg = arg[1:]
-            n = set(arg.split(','))
-            c = n
-        else:
-            n, c = matching(possible(params), arg)
-        if 'current' in group:
-            pos = c
-        elif 'new' in group:
-            pos = n
-        else:
-            pos = n | c
-        if '1' in group and not arg:
-            pos = set()
-        params.append([y for y in [maker(x) for x in pos] if y])
-        params = [x for x in params if x]
-    for variation in product(*params):
+    for variation in _expand_arguments(args, arg_h):
         yield cmd(*variation)
 
 def t_to_d(ts):
@@ -117,8 +137,6 @@ files_p = lambda: set(_file_list())
 stind_p = lambda: set(_stdin_list())
 raw_p = ('both', lambda: set(['']), lambda x: x)
 
-
-
 if __name__ == '__main__':
     # example
     import yaml
@@ -126,6 +144,8 @@ if __name__ == '__main__':
     data_2 = set('we all have time for our friends but we spend it instead'.split())
     data_3 = set('lastly for another time and place'.split())
     sys.argv.pop(0)
-    cmds = {'one': (lambda a, b: [a, b], [('current', lambda x: data_1, lambda x: x.upper()),
-                                          ('both', lambda x: data_2, lambda x: x.upper())])}
-    print(yaml.dump(t_to_d(handle(cmds, sys.argv))))
+    cmds = {'one': (lambda a, b, c: [a, b, c], [('current', lambda x: data_1, lambda x: x.upper()),
+                                                ('current', lambda x: data_3, lambda x: x.upper()),
+                                                ('|', None, None),
+                                                ('both', lambda x: data_2, lambda x: x.upper())])}
+    print(list(handle(cmds, sys.argv)))
